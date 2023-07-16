@@ -1,8 +1,8 @@
 [features]
-seeds = false
+seeds = true
 skip-lint = false
 [programs.localnet]
-extracto_program = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+extracto_program = "2UY7QMKYhhopePhWBU8rorttHRWsijJC4r4T72xxjH6v"
 
 [registry]
 url = "https://api.apr.dev"

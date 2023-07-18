@@ -92,6 +92,28 @@ pub mod extracto_program {
         Ok(())
     }
 
+    pub fn resume_thread(ctx: Context<ResumeThread>, _thread_id: Vec<u8>) -> Result<()> {
+        // Get accounts.
+        let clockwork_program = &ctx.accounts.clockwork_program;
+        let thread = &ctx.accounts.thread;
+        let thread_authority = &ctx.accounts.thread_authority;
+
+        // 3️⃣ Pause thread via CPI.
+        let bump = *ctx.bumps.get("thread_authority").unwrap();
+        clockwork_sdk::cpi::thread_resume(
+            CpiContext::new_with_signer(
+                clockwork_program.to_account_info(),
+                clockwork_sdk::cpi::ThreadResume {
+                    thread: thread.to_account_info(),
+                    authority: thread_authority.to_account_info(),
+                },
+                &[&[THREAD_AUTHORITY_SEED, &[bump]]],
+            ), // trigger
+        )?;
+
+        Ok(())
+    }
+
     pub fn increment_via_thread(ctx: Context<IncrementViaThread>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         msg!("Previous counter: {}", counter.count);
@@ -161,6 +183,22 @@ pub struct StartThread<'info> {
 #[derive(Accounts)]
 #[instruction(thread_id: Vec<u8>)]
 pub struct PauseThread<'info> {
+    /// The Clockwork thread program.
+    #[account(address = clockwork_sdk::ID)]
+    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
+
+    /// The thread to reset.
+    #[account(mut, address = thread.pubkey(), constraint = thread.authority.eq(&thread_authority.key()))]
+    pub thread: Account<'info, Thread>,
+
+    /// The pda that will own and manage the thread.
+    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    pub thread_authority: SystemAccount<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(thread_id: Vec<u8>)]
+pub struct ResumeThread<'info> {
     /// The Clockwork thread program.
     #[account(address = clockwork_sdk::ID)]
     pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,

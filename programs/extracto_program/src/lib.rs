@@ -7,7 +7,7 @@ use clockwork_sdk::state::{Thread, ThreadAccount};
 
 declare_id!("CHPyHid6CQzErEYrsuinBRsjPdsUZdUzgKMCc6VZ9Tjf");
 
-pub const COUNTER_SEED: &[u8] = b"counter_1";
+pub const COUNTER_SEED: &[u8] = b"counter";
 pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
 
 #[program]
@@ -164,7 +164,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = user,
-        seeds = [COUNTER_SEED],
+        seeds = [COUNTER_SEED, user.key().as_ref()],
         bump,
         space = 8 + 8)]
     pub counter: Account<'info, Counter>,
@@ -251,7 +251,7 @@ pub struct DeleteThread<'info> {
 
 #[derive(Accounts)]
 pub struct IncrementViaThread<'info> {
-    #[account(mut, seeds= [COUNTER_SEED], bump)]
+    #[account(mut)]
     pub counter: Account<'info, Counter>,
 
     /// Verify that only this thread can execute the Increment Instruction
@@ -267,7 +267,7 @@ pub struct IncrementViaThread<'info> {
 
 #[derive(Accounts)]
 pub struct Increment<'info> {
-    #[account(mut, seeds= [COUNTER_SEED], bump)]
+    #[account(mut, seeds = [COUNTER_SEED, user.key().as_ref()], bump)]
     pub counter: Account<'info, Counter>,
 
     pub user: Signer<'info>,
@@ -275,7 +275,7 @@ pub struct Increment<'info> {
 
 #[derive(Accounts)]
 pub struct Reset<'info> {
-    #[account(mut)]
+    #[account(mut, seeds = [COUNTER_SEED, user.key().as_ref()], bump)]
     pub counter: Account<'info, Counter>,
     pub user: Signer<'info>,
 }

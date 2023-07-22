@@ -15,7 +15,10 @@ pub mod extracto_program {
     use super::*;
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        let user = &ctx.accounts.user;
+
         let counter = &mut ctx.accounts.counter;
+        counter.authority = user.key();
         counter.count = 0;
         msg!("Counter account created. Current count: {}", counter.count);
         Ok(())
@@ -25,7 +28,7 @@ pub mod extracto_program {
         // Get accounts.
         let system_program = &ctx.accounts.system_program;
         let clockwork_program = &ctx.accounts.clockwork_program;
-        let payer = &ctx.accounts.payer;
+        let user = &ctx.accounts.user;
         let thread = &ctx.accounts.thread;
         let thread_authority = &ctx.accounts.thread_authority;
         let counter = &mut ctx.accounts.counter;
@@ -54,12 +57,12 @@ pub mod extracto_program {
             CpiContext::new_with_signer(
                 clockwork_program.to_account_info(),
                 clockwork_sdk::cpi::ThreadCreate {
-                    payer: payer.to_account_info(),
+                    payer: user.to_account_info(),
                     system_program: system_program.to_account_info(),
                     thread: thread.to_account_info(),
                     authority: thread_authority.to_account_info(),
                 },
-                &[&[THREAD_AUTHORITY_SEED, &[bump]]], //this is signer seeds needed by the called program to verify PDA signature
+                &[&[THREAD_AUTHORITY_SEED, user.key().as_ref(), &[bump]]], //this is signer seeds needed by the called program to verify PDA signature
             ),
             LAMPORTS_PER_SOL,       // amount
             thread_id,              // id
@@ -72,6 +75,7 @@ pub mod extracto_program {
 
     pub fn pause_thread(ctx: Context<PauseThread>) -> Result<()> {
         // Get accounts.
+        let user = &ctx.accounts.user;
         let clockwork_program = &ctx.accounts.clockwork_program;
         let thread = &ctx.accounts.thread;
         let thread_authority = &ctx.accounts.thread_authority;
@@ -85,7 +89,7 @@ pub mod extracto_program {
                     thread: thread.to_account_info(),
                     authority: thread_authority.to_account_info(),
                 },
-                &[&[THREAD_AUTHORITY_SEED, &[bump]]],
+                &[&[THREAD_AUTHORITY_SEED, user.key().as_ref(), &[bump]]],
             ), // trigger
         )?;
 
@@ -94,6 +98,7 @@ pub mod extracto_program {
 
     pub fn resume_thread(ctx: Context<ResumeThread>) -> Result<()> {
         // Get accounts.
+        let user = &ctx.accounts.user;
         let clockwork_program = &ctx.accounts.clockwork_program;
         let thread = &ctx.accounts.thread;
         let thread_authority = &ctx.accounts.thread_authority;
@@ -107,7 +112,7 @@ pub mod extracto_program {
                     thread: thread.to_account_info(),
                     authority: thread_authority.to_account_info(),
                 },
-                &[&[THREAD_AUTHORITY_SEED, &[bump]]],
+                &[&[THREAD_AUTHORITY_SEED, user.key().as_ref(), &[bump]]],
             ), // trigger
         )?;
 
@@ -117,7 +122,7 @@ pub mod extracto_program {
     pub fn delete_thread(ctx: Context<DeleteThread>) -> Result<()> {
         // Get accounts
         let clockwork_program = &ctx.accounts.clockwork_program;
-        let payer = &ctx.accounts.payer;
+        let user = &ctx.accounts.user;
         let thread = &ctx.accounts.thread;
         let thread_authority = &ctx.accounts.thread_authority;
 
@@ -127,10 +132,10 @@ pub mod extracto_program {
             clockwork_program.to_account_info(),
             clockwork_sdk::cpi::ThreadDelete {
                 authority: thread_authority.to_account_info(),
-                close_to: payer.to_account_info(),
+                close_to: user.to_account_info(),
                 thread: thread.to_account_info(),
             },
-            &[&[THREAD_AUTHORITY_SEED, &[bump]]],
+            &[&[THREAD_AUTHORITY_SEED, user.key().as_ref(), &[bump]]],
         ))?;
         Ok(())
     }
@@ -166,7 +171,7 @@ pub struct Initialize<'info> {
         payer = user,
         seeds = [COUNTER_SEED, user.key().as_ref()],
         bump,
-        space = 8 + 8)]
+        space = 8 + 8 + 32)]
     pub counter: Account<'info, Counter>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -186,7 +191,7 @@ pub struct StartThread<'info> {
     /// The signer who will pay to initialize the program.
     /// (not to be confused with the thread executions).
     #[account(mut)]
-    pub payer: Signer<'info>,
+    pub user: Signer<'info>,
 
     /// The Solana system program.
     #[account(address = system_program::ID)]
@@ -197,12 +202,14 @@ pub struct StartThread<'info> {
     pub thread: SystemAccount<'info>,
 
     /// The pda that will own and manage the thread.
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
 pub struct PauseThread<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
     /// The Clockwork thread program.
     #[account(address = clockwork_sdk::ID)]
     pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
@@ -212,12 +219,14 @@ pub struct PauseThread<'info> {
     pub thread: Account<'info, Thread>,
 
     /// The pda that will own and manage the thread.
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
 pub struct ResumeThread<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
     /// The Clockwork thread program.
     #[account(address = clockwork_sdk::ID)]
     pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
@@ -227,14 +236,14 @@ pub struct ResumeThread<'info> {
     pub thread: Account<'info, Thread>,
 
     /// The pda that will own and manage the thread.
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
 pub struct DeleteThread<'info> {
     #[account(mut)]
-    pub payer: Signer<'info>,
+    pub user: Signer<'info>,
 
     /// The Clockwork thread program.
     #[account(address = clockwork_sdk::ID)]
@@ -245,7 +254,7 @@ pub struct DeleteThread<'info> {
     pub thread: Account<'info, Thread>,
 
     /// The pda that owns and manages the thread.
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
@@ -261,7 +270,7 @@ pub struct IncrementViaThread<'info> {
     /// The Thread Admin
     /// The authority that was used as a seed to derive the thread address
     /// `thread_authority` should equal `thread.thread_authority`
-    #[account(seeds = [THREAD_AUTHORITY_SEED], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, counter.authority.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
@@ -282,5 +291,6 @@ pub struct Reset<'info> {
 
 #[account]
 pub struct Counter {
+    pub authority: Pubkey,
     pub count: u64,
 }

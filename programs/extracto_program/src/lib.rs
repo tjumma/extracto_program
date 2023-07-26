@@ -4,8 +4,15 @@ use anchor_lang::solana_program::{
 };
 use anchor_lang::InstructionData;
 use clockwork_sdk::state::{Thread, ThreadAccount};
+use gpl_session::{session_auth_or, Session, SessionError, SessionToken};
 
 declare_id!("CHPyHid6CQzErEYrsuinBRsjPdsUZdUzgKMCc6VZ9Tjf");
+
+#[error_code]
+pub enum GameErrorCode {
+    #[msg("Wrong Authority")]
+    WrongAuthority,
+}
 
 pub const COUNTER_SEED: &[u8] = b"counter";
 pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
@@ -148,6 +155,10 @@ pub mod extracto_program {
         Ok(())
     }
 
+    #[session_auth_or(
+        ctx.accounts.counter.authority.key() == ctx.accounts.user.key(),
+        GameErrorCode::WrongAuthority
+    )]
     pub fn increment(ctx: Context<Increment>) -> Result<()> {
         let counter = &mut ctx.accounts.counter;
         msg!("Previous counter: {}", counter.count);
@@ -274,12 +285,21 @@ pub struct IncrementViaThread<'info> {
     pub thread_authority: SystemAccount<'info>,
 }
 
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 pub struct Increment<'info> {
-    #[account(mut, seeds = [COUNTER_SEED, user.key().as_ref()], bump)]
+    #[account(mut, seeds = [COUNTER_SEED, counter.authority.key().as_ref()], bump)]
     pub counter: Account<'info, Counter>,
 
     pub user: Signer<'info>,
+
+    #[session(
+        // The ephemeral keypair signing the transaction
+        signer = user,
+        // The authority of the user account which must have created the session
+        authority = counter.authority.key()
+    )]
+    // Session Tokens are passed as optional accounts
+    pub session_token: Option<Account<'info, SessionToken>>,
 }
 
 #[derive(Accounts)]

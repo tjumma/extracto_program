@@ -14,6 +14,7 @@ pub enum GameErrorCode {
     WrongAuthority,
 }
 
+pub const PLAYER_SEED: &[u8] = b"player";
 pub const COUNTER_SEED: &[u8] = b"counter";
 pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
 
@@ -21,12 +22,25 @@ pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
 pub mod extracto_program {
     use super::*;
 
+    pub fn init_player(ctx: Context<InitPlayer>, name: String) -> Result<()> {
+        let player = &ctx.accounts.player;
+        let player_data = &mut ctx.accounts.player_data;
+
+        player_data.authority = player.key();
+        player_data.name = name;
+        player_data.runs_finished = 0;
+
+        msg!("PlayerData account for {} initialized", player_data.name);
+        Ok(())
+    }
+
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         let user = &ctx.accounts.user;
-
         let counter = &mut ctx.accounts.counter;
+
         counter.authority = user.key();
         counter.count = 0;
+
         msg!("Counter account created. Current count: {}", counter.count);
         Ok(())
     }
@@ -182,7 +196,7 @@ pub struct Initialize<'info> {
         payer = user,
         seeds = [COUNTER_SEED, user.key().as_ref()],
         bump,
-        space = 8 + 8 + 32)]
+        space = 8 + 32 + 8)]
     pub counter: Account<'info, Counter>,
     #[account(mut)]
     pub user: Signer<'info>,
@@ -309,8 +323,38 @@ pub struct Reset<'info> {
     pub user: Signer<'info>,
 }
 
+#[derive(Accounts)]
+#[instruction(player_name: String)]
+pub struct InitPlayer<'info> {
+    #[account(
+        init,
+        payer = player,
+        seeds = [PLAYER_SEED, player.key().as_ref()],
+        bump,
+        space = 8 + 32 + 4 + player_name.len() + 4)]
+    pub player_data: Account<'info, PlayerData>,
+    #[account(mut)]
+    pub player: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[account]
 pub struct Counter {
     pub authority: Pubkey,
     pub count: u64,
+}
+
+#[account]
+pub struct PlayerData {
+    pub authority: Pubkey,
+    pub name: String,
+    pub runs_finished: u32,
+}
+
+pub fn xorshift64(seed: u64) -> u64 {
+    let mut x = seed;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    x
 }

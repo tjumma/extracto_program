@@ -35,13 +35,37 @@ pub mod extracto_program {
     }
 
     pub fn start_new_run(ctx: Context<StartNewRun>) -> Result<()> {
+
         let user = &ctx.accounts.user;
         let run = &mut ctx.accounts.run;
+        let player_data = &mut ctx.accounts.player_data;
 
         run.authority = user.key();
         run.score = 0;
 
-        msg!("RunData account created");
+        player_data.is_in_run = true;
+
+        msg!("Run started");
+        Ok(())
+    }
+
+    pub fn finish_run(ctx: Context<FinishRun>) -> Result<()> {
+
+        let run = &mut ctx.accounts.run;
+        let player_data = &mut ctx.accounts.player_data;
+
+        player_data.runs_finished = player_data.runs_finished.checked_add(1).unwrap();
+
+        if run.score > player_data.best_score
+        {
+            player_data.best_score = run.score;
+            msg!("New best score: {}", player_data.best_score);
+        }
+
+        player_data.is_in_run = false;
+        run.score = 0;
+
+        msg!("RunData finished");
         Ok(())
     }
 
@@ -192,15 +216,27 @@ pub mod extracto_program {
 #[derive(Accounts)]
 pub struct StartNewRun<'info> {
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         seeds = [RUN_SEED, user.key().as_ref()],
         bump,
         space = 8 + 32 + 8)]
     pub run: Account<'info, RunData>,
+    #[account(mut, seeds = [PLAYER_SEED, user.key().as_ref()], bump)]
+    pub player_data: Account<'info, PlayerData>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct FinishRun<'info> {
+    #[account(mut, seeds = [RUN_SEED, player.key().as_ref()], bump)]
+    pub run: Account<'info, RunData>,
+    #[account(mut, seeds = [PLAYER_SEED, player.key().as_ref()], bump)]
+    pub player_data: Account<'info, PlayerData>,
+    #[account(mut)]
+    pub player: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -331,7 +367,7 @@ pub struct InitPlayer<'info> {
         payer = player,
         seeds = [PLAYER_SEED, player.key().as_ref()],
         bump,
-        space = 8 + 32 + 4 + player_name.len() + 4)]
+        space = 8 + 32 + 4 + player_name.len() + 4 + 8 + 1)]
     pub player_data: Account<'info, PlayerData>,
     #[account(mut)]
     pub player: Signer<'info>,
@@ -349,6 +385,8 @@ pub struct PlayerData {
     pub authority: Pubkey,
     pub name: String,
     pub runs_finished: u32,
+    pub best_score: u64,
+    pub is_in_run: bool
 }
 
 pub fn xorshift64(seed: u64) -> u64 {

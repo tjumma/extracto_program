@@ -15,7 +15,7 @@ pub enum GameErrorCode {
 }
 
 pub const PLAYER_SEED: &[u8] = b"player";
-pub const COUNTER_SEED: &[u8] = b"counter";
+pub const RUN_SEED: &[u8] = b"run";
 pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
 
 #[program]
@@ -34,14 +34,14 @@ pub mod extracto_program {
         Ok(())
     }
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+    pub fn start_new_run(ctx: Context<StartNewRun>) -> Result<()> {
         let user = &ctx.accounts.user;
-        let counter = &mut ctx.accounts.counter;
+        let run = &mut ctx.accounts.run;
 
-        counter.authority = user.key();
-        counter.count = 0;
+        run.authority = user.key();
+        run.count = 0;
 
-        msg!("Counter account created. Current count: {}", counter.count);
+        msg!("RunData account created");
         Ok(())
     }
 
@@ -52,13 +52,13 @@ pub mod extracto_program {
         let user = &ctx.accounts.user;
         let thread = &ctx.accounts.thread;
         let thread_authority = &ctx.accounts.thread_authority;
-        let counter = &mut ctx.accounts.counter;
+        let run = &mut ctx.accounts.run;
 
         // 1️⃣ Prepare an instruction to be automated.
         let target_ix = Instruction {
             program_id: ID,
             accounts: crate::accounts::IncrementViaThread {
-                counter: counter.key(),
+                run: run.key(),
                 thread: thread.key(),
                 thread_authority: thread_authority.key(),
             }
@@ -162,42 +162,42 @@ pub mod extracto_program {
     }
 
     pub fn increment_via_thread(ctx: Context<IncrementViaThread>) -> Result<()> {
-        let counter = &mut ctx.accounts.counter;
-        msg!("Previous counter: {}", counter.count);
-        counter.count = counter.count.checked_add(1).unwrap();
-        msg!("Counter incremented. Current count: {}", counter.count);
+        let run = &mut ctx.accounts.run;
+        msg!("Previous points: {}", run.count);
+        run.count = run.count.checked_add(1).unwrap();
+        msg!("Run points incremented. Current points: {}", run.count);
         Ok(())
     }
 
     #[session_auth_or(
-        ctx.accounts.counter.authority.key() == ctx.accounts.user.key(),
+        ctx.accounts.run.authority.key() == ctx.accounts.user.key(),
         GameErrorCode::WrongAuthority
     )]
     pub fn increment(ctx: Context<Increment>) -> Result<()> {
-        let counter = &mut ctx.accounts.counter;
-        msg!("Previous counter: {}", counter.count);
-        counter.count = counter.count.checked_add(1).unwrap();
-        msg!("Counter incremented. Current count: {}", counter.count);
+        let run = &mut ctx.accounts.run;
+        msg!("Previous run points: {}", run.count);
+        run.count = run.count.checked_add(1).unwrap();
+        msg!("Run points incremented. Current points: {}", run.count);
         Ok(())
     }
 
     pub fn reset(ctx: Context<Reset>) -> Result<()> {
-        let counter = &mut ctx.accounts.counter;
-        counter.count = 0;
-        msg!("Counter reset. Current count: {}", counter.count);
+        let run = &mut ctx.accounts.run;
+        run.count = 0;
+        msg!("Run points reset. Current points: {}", run.count);
         Ok(())
     }
 }
 
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct StartNewRun<'info> {
     #[account(
         init,
         payer = user,
-        seeds = [COUNTER_SEED, user.key().as_ref()],
+        seeds = [RUN_SEED, user.key().as_ref()],
         bump,
         space = 8 + 32 + 8)]
-    pub counter: Account<'info, Counter>,
+    pub run: Account<'info, RunData>,
     #[account(mut)]
     pub user: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -207,7 +207,7 @@ pub struct Initialize<'info> {
 #[instruction(thread_id: Vec<u8>)]
 pub struct StartThread<'info> {
     #[account(mut)]
-    pub counter: Account<'info, Counter>,
+    pub run: Account<'info, RunData>,
 
     /// The Clockwork thread program.
     #[account(address = clockwork_sdk::ID)]
@@ -286,7 +286,7 @@ pub struct DeleteThread<'info> {
 #[derive(Accounts)]
 pub struct IncrementViaThread<'info> {
     #[account(mut)]
-    pub counter: Account<'info, Counter>,
+    pub run: Account<'info, RunData>,
 
     /// Verify that only this thread can execute the Increment Instruction
     #[account(signer, constraint = thread.authority.eq(&thread_authority.key()))]
@@ -295,14 +295,14 @@ pub struct IncrementViaThread<'info> {
     /// The Thread Admin
     /// The authority that was used as a seed to derive the thread address
     /// `thread_authority` should equal `thread.thread_authority`
-    #[account(seeds = [THREAD_AUTHORITY_SEED, counter.authority.key().as_ref()], bump)]
+    #[account(seeds = [THREAD_AUTHORITY_SEED, run.authority.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts, Session)]
 pub struct Increment<'info> {
-    #[account(mut, seeds = [COUNTER_SEED, counter.authority.key().as_ref()], bump)]
-    pub counter: Account<'info, Counter>,
+    #[account(mut, seeds = [RUN_SEED, run.authority.key().as_ref()], bump)]
+    pub run: Account<'info, RunData>,
 
     pub user: Signer<'info>,
 
@@ -310,7 +310,7 @@ pub struct Increment<'info> {
         // The ephemeral keypair signing the transaction
         signer = user,
         // The authority of the user account which must have created the session
-        authority = counter.authority.key()
+        authority = run.authority.key()
     )]
     // Session Tokens are passed as optional accounts
     pub session_token: Option<Account<'info, SessionToken>>,
@@ -318,8 +318,8 @@ pub struct Increment<'info> {
 
 #[derive(Accounts)]
 pub struct Reset<'info> {
-    #[account(mut, seeds = [COUNTER_SEED, user.key().as_ref()], bump)]
-    pub counter: Account<'info, Counter>,
+    #[account(mut, seeds = [RUN_SEED, user.key().as_ref()], bump)]
+    pub run: Account<'info, RunData>,
     pub user: Signer<'info>,
 }
 
@@ -339,7 +339,7 @@ pub struct InitPlayer<'info> {
 }
 
 #[account]
-pub struct Counter {
+pub struct RunData {
     pub authority: Pubkey,
     pub count: u64,
 }

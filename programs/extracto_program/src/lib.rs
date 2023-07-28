@@ -63,7 +63,7 @@ pub mod extracto_program {
 
         // 2️⃣ Define a trigger for the thread (every 10 secs).
         let trigger = clockwork_sdk::state::Trigger::Cron {
-            schedule: "*/10 * * * * * *".into(),
+            schedule: "*/1 * * * * * *".into(),
             skippable: true,
         };
 
@@ -96,6 +96,22 @@ pub mod extracto_program {
     pub fn finish_run(ctx: Context<FinishRun>) -> Result<()> {
         let run = &mut ctx.accounts.run;
         let player_data = &mut ctx.accounts.player_data;
+        let clockwork_program = &ctx.accounts.clockwork_program;
+        let player = &ctx.accounts.player;
+        let thread = &ctx.accounts.thread;
+        let thread_authority = &ctx.accounts.thread_authority;
+
+        // Delete thread via CPI.
+        let bump = *ctx.bumps.get("thread_authority").unwrap();
+        clockwork_sdk::cpi::thread_delete(CpiContext::new_with_signer(
+            clockwork_program.to_account_info(),
+            clockwork_sdk::cpi::ThreadDelete {
+                authority: thread_authority.to_account_info(),
+                close_to: player.to_account_info(),
+                thread: thread.to_account_info(),
+            },
+            &[&[THREAD_AUTHORITY_SEED, player.key().as_ref(), &[bump]]],
+        ))?;
 
         player_data.runs_finished = player_data.runs_finished.checked_add(1).unwrap();
 
@@ -134,7 +150,7 @@ pub mod extracto_program {
 
         // 2️⃣ Define a trigger for the thread (every 10 secs).
         let trigger = clockwork_sdk::state::Trigger::Cron {
-            schedule: "*/10 * * * * * *".into(),
+            schedule: "*/1 * * * * * *".into(),
             skippable: true,
         };
 
@@ -334,10 +350,39 @@ pub struct StartThread<'info> {
 pub struct FinishRun<'info> {
     #[account(mut, seeds = [RUN_SEED, player.key().as_ref()], bump)]
     pub run: Account<'info, RunData>,
+
     #[account(mut, seeds = [PLAYER_SEED, player.key().as_ref()], bump)]
     pub player_data: Account<'info, PlayerData>,
+
     #[account(mut)]
     pub player: Signer<'info>,
+
+    #[account(address = clockwork_sdk::ID)]
+    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
+
+    #[account(mut, address = thread.pubkey(), constraint = thread.authority.eq(&thread_authority.key()))]
+    pub thread: Account<'info, Thread>,
+
+    #[account(seeds = [THREAD_AUTHORITY_SEED, player.key().as_ref()], bump)]
+    pub thread_authority: SystemAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct DeleteThread<'info> {
+    #[account(mut)]
+    pub user: Signer<'info>,
+
+    /// The Clockwork thread program.
+    #[account(address = clockwork_sdk::ID)]
+    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
+
+    /// The thread to reset.
+    #[account(mut, address = thread.pubkey(), constraint = thread.authority.eq(&thread_authority.key()))]
+    pub thread: Account<'info, Thread>,
+
+    /// The pda that owns and manages the thread.
+    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
+    pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -370,24 +415,6 @@ pub struct ResumeThread<'info> {
     pub thread: Account<'info, Thread>,
 
     /// The pda that will own and manage the thread.
-    #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
-    pub thread_authority: SystemAccount<'info>,
-}
-
-#[derive(Accounts)]
-pub struct DeleteThread<'info> {
-    #[account(mut)]
-    pub user: Signer<'info>,
-
-    /// The Clockwork thread program.
-    #[account(address = clockwork_sdk::ID)]
-    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
-
-    /// The thread to reset.
-    #[account(mut, address = thread.pubkey(), constraint = thread.authority.eq(&thread_authority.key()))]
-    pub thread: Account<'info, Thread>,
-
-    /// The pda that owns and manages the thread.
     #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
 }

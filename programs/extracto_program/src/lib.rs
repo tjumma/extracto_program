@@ -39,7 +39,7 @@ pub mod extracto_program {
         let run = &mut ctx.accounts.run;
 
         run.authority = user.key();
-        run.count = 0;
+        run.score = 0;
 
         msg!("RunData account created");
         Ok(())
@@ -163,9 +163,9 @@ pub mod extracto_program {
 
     pub fn increment_via_thread(ctx: Context<IncrementViaThread>) -> Result<()> {
         let run = &mut ctx.accounts.run;
-        msg!("Previous points: {}", run.count);
-        run.count = run.count.checked_add(1).unwrap();
-        msg!("Run points incremented. Current points: {}", run.count);
+        msg!("Previous points: {}", run.score);
+        run.score = run.score.checked_add(1).unwrap();
+        msg!("Run points incremented. Current points: {}", run.score);
         Ok(())
     }
 
@@ -175,16 +175,16 @@ pub mod extracto_program {
     )]
     pub fn increment(ctx: Context<Increment>) -> Result<()> {
         let run = &mut ctx.accounts.run;
-        msg!("Previous run points: {}", run.count);
-        run.count = run.count.checked_add(1).unwrap();
-        msg!("Run points incremented. Current points: {}", run.count);
+        msg!("Previous run points: {}", run.score);
+        run.score = run.score.checked_add(1).unwrap();
+        msg!("Run points incremented. Current points: {}", run.score);
         Ok(())
     }
 
     pub fn reset(ctx: Context<Reset>) -> Result<()> {
         let run = &mut ctx.accounts.run;
-        run.count = 0;
-        msg!("Run points reset. Current points: {}", run.count);
+        run.score = 0;
+        msg!("Run points reset. Current points: {}", run.score);
         Ok(())
     }
 }
@@ -341,7 +341,7 @@ pub struct InitPlayer<'info> {
 #[account]
 pub struct RunData {
     pub authority: Pubkey,
-    pub count: u64,
+    pub score: u64,
 }
 
 #[account]

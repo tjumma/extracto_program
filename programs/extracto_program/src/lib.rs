@@ -25,39 +25,81 @@ pub mod extracto_program {
     pub fn init_player(ctx: Context<InitPlayer>, name: String) -> Result<()> {
         let player = &ctx.accounts.player;
         let player_data = &mut ctx.accounts.player_data;
+        let run = &mut ctx.accounts.run;
 
         player_data.authority = player.key();
         player_data.name = name;
         player_data.runs_finished = 0;
+        player_data.is_in_run = false;
+        player_data.best_score = 0;
 
-        msg!("PlayerData account for {} initialized", player_data.name);
+        run.authority = player.key();
+        run.score = 0;
+
+        msg!("Player {} initialized", player_data.name);
         Ok(())
     }
 
-    pub fn start_new_run(ctx: Context<StartNewRun>) -> Result<()> {
-
-        let user = &ctx.accounts.user;
+    pub fn start_new_run(ctx: Context<StartNewRun>, thread_id: Vec<u8>) -> Result<()> {
+        let player = &ctx.accounts.player;
         let run = &mut ctx.accounts.run;
         let player_data = &mut ctx.accounts.player_data;
+        let system_program = &ctx.accounts.system_program;
+        let clockwork_program = &ctx.accounts.clockwork_program;
+        let thread = &ctx.accounts.thread;
+        let thread_authority = &ctx.accounts.thread_authority;
 
-        run.authority = user.key();
-        run.score = 0;
+        // 1️⃣ Prepare an instruction to be automated.
+        let target_ix = Instruction {
+            program_id: ID,
+            accounts: crate::accounts::IncrementViaThread {
+                run: run.key(),
+                thread: thread.key(),
+                thread_authority: thread_authority.key(),
+            }
+            .to_account_metas(Some(true)),
+            data: crate::instruction::IncrementViaThread {}.data(),
+        };
+
+        // 2️⃣ Define a trigger for the thread (every 10 secs).
+        let trigger = clockwork_sdk::state::Trigger::Cron {
+            schedule: "*/10 * * * * * *".into(),
+            skippable: true,
+        };
+
+        // 3️⃣ Create thread via CPI.
+        let bump = *ctx.bumps.get("thread_authority").unwrap();
+        clockwork_sdk::cpi::thread_create(
+            CpiContext::new_with_signer(
+                clockwork_program.to_account_info(),
+                clockwork_sdk::cpi::ThreadCreate {
+                    payer: player.to_account_info(),
+                    system_program: system_program.to_account_info(),
+                    thread: thread.to_account_info(),
+                    authority: thread_authority.to_account_info(),
+                },
+                &[&[THREAD_AUTHORITY_SEED, player.key().as_ref(), &[bump]]], //this is signer seeds needed by the called program to verify PDA signature
+            ),
+            LAMPORTS_PER_SOL,       // amount
+            thread_id,              // id
+            vec![target_ix.into()], // instructions
+            trigger,                // trigger
+        )?;
 
         player_data.is_in_run = true;
+        run.score = 0;
 
         msg!("Run started");
         Ok(())
     }
 
     pub fn finish_run(ctx: Context<FinishRun>) -> Result<()> {
-
         let run = &mut ctx.accounts.run;
         let player_data = &mut ctx.accounts.player_data;
 
         player_data.runs_finished = player_data.runs_finished.checked_add(1).unwrap();
 
-        if run.score > player_data.best_score
-        {
+        if run.score > player_data.best_score {
             player_data.best_score = run.score;
             msg!("New best score: {}", player_data.best_score);
         }
@@ -214,29 +256,50 @@ pub mod extracto_program {
 }
 
 #[derive(Accounts)]
-pub struct StartNewRun<'info> {
+#[instruction(player_name: String)]
+pub struct InitPlayer<'info> {
     #[account(
-        init_if_needed,
-        payer = user,
-        seeds = [RUN_SEED, user.key().as_ref()],
+        init,
+        payer = player,
+        seeds = [PLAYER_SEED, player.key().as_ref()],
+        bump,
+        space = 8 + 32 + 4 + player_name.len() + 4 + 8 + 1)]
+    pub player_data: Account<'info, PlayerData>,
+    #[account(
+        init,
+        payer = player,
+        seeds = [RUN_SEED, player.key().as_ref()],
         bump,
         space = 8 + 32 + 8)]
     pub run: Account<'info, RunData>,
-    #[account(mut, seeds = [PLAYER_SEED, user.key().as_ref()], bump)]
-    pub player_data: Account<'info, PlayerData>,
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub player: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct FinishRun<'info> {
+#[instruction(thread_id: Vec<u8>)]
+pub struct StartNewRun<'info> {
     #[account(mut, seeds = [RUN_SEED, player.key().as_ref()], bump)]
     pub run: Account<'info, RunData>,
+
     #[account(mut, seeds = [PLAYER_SEED, player.key().as_ref()], bump)]
     pub player_data: Account<'info, PlayerData>,
+
     #[account(mut)]
     pub player: Signer<'info>,
+
+    #[account(address = clockwork_sdk::ID)]
+    pub clockwork_program: Program<'info, clockwork_sdk::ThreadProgram>,
+
+    #[account(address = system_program::ID)]
+    pub system_program: Program<'info, System>,
+
+    #[account(mut, address = Thread::pubkey(thread_authority.key(), thread_id))]
+    pub thread: SystemAccount<'info>,
+
+    #[account(seeds = [THREAD_AUTHORITY_SEED, player.key().as_ref()], bump)]
+    pub thread_authority: SystemAccount<'info>,
 }
 
 #[derive(Accounts)]
@@ -265,6 +328,16 @@ pub struct StartThread<'info> {
     /// The pda that will own and manage the thread.
     #[account(seeds = [THREAD_AUTHORITY_SEED, user.key().as_ref()], bump)]
     pub thread_authority: SystemAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct FinishRun<'info> {
+    #[account(mut, seeds = [RUN_SEED, player.key().as_ref()], bump)]
+    pub run: Account<'info, RunData>,
+    #[account(mut, seeds = [PLAYER_SEED, player.key().as_ref()], bump)]
+    pub player_data: Account<'info, PlayerData>,
+    #[account(mut)]
+    pub player: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -359,21 +432,6 @@ pub struct Reset<'info> {
     pub user: Signer<'info>,
 }
 
-#[derive(Accounts)]
-#[instruction(player_name: String)]
-pub struct InitPlayer<'info> {
-    #[account(
-        init,
-        payer = player,
-        seeds = [PLAYER_SEED, player.key().as_ref()],
-        bump,
-        space = 8 + 32 + 4 + player_name.len() + 4 + 8 + 1)]
-    pub player_data: Account<'info, PlayerData>,
-    #[account(mut)]
-    pub player: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
 #[account]
 pub struct RunData {
     pub authority: Pubkey,
@@ -386,7 +444,7 @@ pub struct PlayerData {
     pub name: String,
     pub runs_finished: u32,
     pub best_score: u64,
-    pub is_in_run: bool
+    pub is_in_run: bool,
 }
 
 pub fn xorshift64(seed: u64) -> u64 {

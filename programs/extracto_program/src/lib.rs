@@ -92,55 +92,55 @@ pub mod extracto_program {
         player_data.is_in_run = true;
         run.score = 0;
 
-        run.slots[0] = CharacterInfo {
+        run.slots[0] = Some(CharacterInfo {
             id: 0,
             alignment: 0,
             character_type: 0,
             cooldown: COOLDOWN_BY_TYPE[0],
             cooldown_timer: COOLDOWN_BY_TYPE[0],
-        };
-        run.slots[1] = CharacterInfo {
+        });
+        run.slots[1] = Some(CharacterInfo {
             id: 1,
             alignment: 0,
             character_type: 1,
             cooldown: COOLDOWN_BY_TYPE[1],
             cooldown_timer: COOLDOWN_BY_TYPE[1],
-        };
-        run.slots[2] = CharacterInfo {
+        });
+        run.slots[2] = Some(CharacterInfo {
             id: 2,
             alignment: 0,
             character_type: 2,
             cooldown: COOLDOWN_BY_TYPE[2],
             cooldown_timer: COOLDOWN_BY_TYPE[2],
-        };
-        run.slots[3] = CharacterInfo {
+        });
+        run.slots[3] = Some(CharacterInfo {
+            id: 3,
+            alignment: 1,
+            character_type: 4,
+            cooldown: COOLDOWN_BY_TYPE[4],
+            cooldown_timer: COOLDOWN_BY_TYPE[4],
+        });
+        run.slots[4] = Some(CharacterInfo {
             id: 4,
             alignment: 1,
             character_type: 4,
             cooldown: COOLDOWN_BY_TYPE[4],
             cooldown_timer: COOLDOWN_BY_TYPE[4],
-        };
-        run.slots[4] = CharacterInfo {
-            id: 4,
-            alignment: 1,
-            character_type: 4,
-            cooldown: COOLDOWN_BY_TYPE[4],
-            cooldown_timer: COOLDOWN_BY_TYPE[4],
-        };
-        run.slots[5] = CharacterInfo {
+        });
+        run.slots[5] = Some(CharacterInfo {
             id: 5,
             alignment: 1,
             character_type: 5,
             cooldown: COOLDOWN_BY_TYPE[5],
             cooldown_timer: COOLDOWN_BY_TYPE[5],
-        };
-        run.slots[6] = CharacterInfo {
+        });
+        run.slots[6] = Some(CharacterInfo {
             id: 6,
             alignment: 1,
             character_type: 3,
             cooldown: COOLDOWN_BY_TYPE[3],
             cooldown_timer: COOLDOWN_BY_TYPE[3],
-        };
+        });
 
         run.last_character_id = 6;
 
@@ -304,22 +304,24 @@ pub mod extracto_program {
         run.score = run.score.checked_add(1).unwrap();
         msg!("Run points incremented. Current points: {}", run.score);
 
-        for character_info in &mut run.slots {
+        for slot in &mut run.slots {
 
-            let mut new_cooldown_timer = character_info.cooldown_timer - 1;
-            if new_cooldown_timer == 0 {
-                new_cooldown_timer = character_info.cooldown;
+            match slot{
+                Some(character_info) => {
+
+                    let mut new_cooldown_timer = character_info.cooldown_timer - 1;
+                    if new_cooldown_timer == 0 {
+                        new_cooldown_timer = character_info.cooldown;
+                    }
+
+                    // character_info.update_timer(new_cooldown_timer);
+                    character_info.cooldown_timer = new_cooldown_timer;
+
+                    *slot = Some(*character_info)
+                },
+                _ => {}
             }
-            msg!("new_cooldown_timer: {}", new_cooldown_timer);
-            character_info.update_timer(new_cooldown_timer);
-            character_info.cooldown_timer = new_cooldown_timer;
-            msg!(
-                "character_info.cooldown_timer: {}",
-                character_info.cooldown_timer
-            );
         }
-
-        msg!("first slot timer: {}", run.slots[0].cooldown_timer);
 
         Ok(())
     }
@@ -359,7 +361,7 @@ pub struct InitPlayer<'info> {
         payer = player,
         seeds = [RUN_SEED, player.key().as_ref()],
         bump,
-        space = 8 + 32 + 8 + 42 + 2)]
+        space = 8 + 32 + 8 + 49 + 2)]
     pub run: Account<'info, RunData>,
     #[account(mut)]
     pub player: Signer<'info>,
@@ -538,8 +540,8 @@ pub struct RunData {
     pub authority: Pubkey,
     //8
     pub score: u64,
-    //6 * 7 = 42
-    pub slots: [CharacterInfo; 7],
+    //(1 + 6) * 7 = 49
+    pub slots: [Option<CharacterInfo>; 7],
     //2
     pub last_character_id: u16,
 }

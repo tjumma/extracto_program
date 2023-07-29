@@ -1,3 +1,4 @@
+//love sonechka-zvezdochka
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{
     instruction::Instruction, native_token::LAMPORTS_PER_SOL, system_program,
@@ -88,6 +89,16 @@ pub mod extracto_program {
 
         player_data.is_in_run = true;
         run.score = 0;
+
+        run.slots[0] = Some(CharacterInfo {id: 0, alignment: 0, character_type: 1});
+        run.slots[1] = Some(CharacterInfo {id: 1,alignment: 0, character_type: 2});
+        run.slots[2] = Some(CharacterInfo {id: 2,alignment: 0, character_type: 3});
+        run.slots[3] = None;
+        run.slots[4] = Some(CharacterInfo {id: 4,alignment: 1, character_type: 5});
+        run.slots[5] = Some(CharacterInfo {id: 5,alignment: 1, character_type: 6});
+        run.slots[6] = Some(CharacterInfo {id: 6,alignment: 1, character_type: 4});
+
+        run.last_character_id = 5;
 
         msg!("Run started");
         Ok(())
@@ -286,7 +297,7 @@ pub struct InitPlayer<'info> {
         payer = player,
         seeds = [RUN_SEED, player.key().as_ref()],
         bump,
-        space = 8 + 32 + 8)]
+        space = 8 + 32 + 8 + 35 + 2)]
     pub run: Account<'info, RunData>,
     #[account(mut)]
     pub player: Signer<'info>,
@@ -461,8 +472,22 @@ pub struct Reset<'info> {
 
 #[account]
 pub struct RunData {
+    //32
     pub authority: Pubkey,
+    //8
     pub score: u64,
+    //(1 + 4) * 7 = 35
+    pub slots: [Option<CharacterInfo>; 7],
+    //2
+    pub last_character_id: u16
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq)]
+// size: 2 + 1 + 1 = 4
+pub struct CharacterInfo {
+    pub id : u16,
+    pub alignment : u8,
+    pub character_type : u8
 }
 
 #[account]

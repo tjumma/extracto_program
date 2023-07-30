@@ -19,7 +19,9 @@ pub const PLAYER_SEED: &[u8] = b"player";
 pub const RUN_SEED: &[u8] = b"run";
 pub const THREAD_AUTHORITY_SEED: &[u8] = b"thread_authority";
 
-pub const COOLDOWN_BY_TYPE: [u8; 7] = [8, 5, 3, 7, 7, 10, 15];
+pub const COOLDOWN_BY_TYPE: [u8; 7] = [8, 2, 2, 2, 7, 10, 15];
+pub const HEALTH_BY_TYPE: [u8; 7] = [5, 7, 10, 5, 5, 10, 20];
+pub const ATTACK_BY_TYPE: [u8; 7] = [1, 1, 1, 1, 1, 2, 5];
 
 #[program]
 pub mod extracto_program {
@@ -98,6 +100,9 @@ pub mod extracto_program {
             character_type: 0,
             cooldown: COOLDOWN_BY_TYPE[0],
             cooldown_timer: COOLDOWN_BY_TYPE[0],
+            max_health: HEALTH_BY_TYPE[0],
+            health: HEALTH_BY_TYPE[0],
+            attack_damage: ATTACK_BY_TYPE[0],
         });
         run.slots[1] = Some(CharacterInfo {
             id: 1,
@@ -105,6 +110,9 @@ pub mod extracto_program {
             character_type: 1,
             cooldown: COOLDOWN_BY_TYPE[1],
             cooldown_timer: COOLDOWN_BY_TYPE[1],
+            max_health: HEALTH_BY_TYPE[1],
+            health: HEALTH_BY_TYPE[1],
+            attack_damage: ATTACK_BY_TYPE[1],
         });
         run.slots[2] = Some(CharacterInfo {
             id: 2,
@@ -112,34 +120,22 @@ pub mod extracto_program {
             character_type: 2,
             cooldown: COOLDOWN_BY_TYPE[2],
             cooldown_timer: COOLDOWN_BY_TYPE[2],
+            max_health: HEALTH_BY_TYPE[2],
+            health: HEALTH_BY_TYPE[2],
+            attack_damage: ATTACK_BY_TYPE[2],
         });
-        run.slots[3] = Some(CharacterInfo {
-            id: 3,
-            alignment: 1,
-            character_type: 4,
-            cooldown: COOLDOWN_BY_TYPE[4],
-            cooldown_timer: COOLDOWN_BY_TYPE[4],
-        });
-        run.slots[4] = Some(CharacterInfo {
-            id: 4,
-            alignment: 1,
-            character_type: 4,
-            cooldown: COOLDOWN_BY_TYPE[4],
-            cooldown_timer: COOLDOWN_BY_TYPE[4],
-        });
-        run.slots[5] = Some(CharacterInfo {
-            id: 5,
-            alignment: 1,
-            character_type: 5,
-            cooldown: COOLDOWN_BY_TYPE[5],
-            cooldown_timer: COOLDOWN_BY_TYPE[5],
-        });
+        run.slots[3] = None;
+        run.slots[4] = None;
+        run.slots[5] = None;
         run.slots[6] = Some(CharacterInfo {
             id: 6,
             alignment: 1,
             character_type: 3,
             cooldown: COOLDOWN_BY_TYPE[3],
             cooldown_timer: COOLDOWN_BY_TYPE[3],
+            max_health: HEALTH_BY_TYPE[3],
+            health: HEALTH_BY_TYPE[3],
+            attack_damage: ATTACK_BY_TYPE[3],
         });
 
         run.last_character_id = 6;
@@ -304,24 +300,95 @@ pub mod extracto_program {
         run.score = run.score.checked_add(1).unwrap();
         msg!("Run points incremented. Current points: {}", run.score);
 
-        for slot in &mut run.slots {
+        let mut slots_clone = run.slots.clone();
+        let n = run.slots.len();
 
-            match slot{
-                Some(character_info) => {
+        //refresh cooldowns
+        for i in 0..n {
+            let slot = slots_clone[i];
 
+            match slot {
+                Some(mut character_info) => {
+                    //cooldowns
+                    let mut perform_action = false;
                     let mut new_cooldown_timer = character_info.cooldown_timer - 1;
                     if new_cooldown_timer == 0 {
                         new_cooldown_timer = character_info.cooldown;
+                        perform_action = true;
                     }
-
-                    // character_info.update_timer(new_cooldown_timer);
                     character_info.cooldown_timer = new_cooldown_timer;
 
-                    *slot = Some(*character_info)
-                },
+                    slots_clone[i] = Some(character_info);
+
+                    if perform_action {
+                        //perform actions for zombies
+                        if character_info.alignment == 1 {
+                            if i > 0 {
+                                if slots_clone[i - 1].is_none() {
+                                    //move left
+                                    slots_clone[i] = None;
+                                    slots_clone[i - 1] = Some(character_info);
+                                }
+                                //if there is somebody to the left
+                                else {
+                                    let mut attacked_character = slots_clone[i - 1].unwrap();
+
+                                    //if it is a hero
+                                    if attacked_character.alignment == 0 {
+                                        //attack the hero
+                                        if character_info.attack_damage >= attacked_character.health
+                                        {
+                                            slots_clone[i - 1] = None;
+                                        } else {
+                                            let new_health = attacked_character.health
+                                                - character_info.attack_damage;
+                                            attacked_character.health = new_health;
+                                            slots_clone[i - 1] = Some(attacked_character);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        //perform actions for heroes
+                        else if character_info.alignment == 0 {
+                            match character_info.character_type {
+                                0 => {}
+                                1 => {
+                                    for a in 4..7 {
+                                        if slots_clone[a].is_none() {
+                                            //nobody to shoot
+                                        } else {
+                                            let mut attacked_character =
+                                                slots_clone[a].unwrap();
+
+                                            //if it is a hero
+                                            if attacked_character.alignment == 1 {
+                                                //attack the hero
+                                                if character_info.attack_damage
+                                                    >= attacked_character.health
+                                                {
+                                                    slots_clone[a] = None;
+                                                } else {
+                                                    let new_health = attacked_character.health
+                                                        - character_info.attack_damage;
+                                                    attacked_character.health = new_health;
+                                                    slots_clone[a] = Some(attacked_character);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                2 => {}
+                                _ => {}
+                            }
+                        }
+                    }
+                }
                 _ => {}
             }
         }
+
+        run.slots = slots_clone;
 
         Ok(())
     }
@@ -361,7 +428,7 @@ pub struct InitPlayer<'info> {
         payer = player,
         seeds = [RUN_SEED, player.key().as_ref()],
         bump,
-        space = 8 + 32 + 8 + 49 + 2)]
+        space = 8 + 32 + 8 + 70 + 2)]
     pub run: Account<'info, RunData>,
     #[account(mut)]
     pub player: Signer<'info>,
@@ -540,20 +607,23 @@ pub struct RunData {
     pub authority: Pubkey,
     //8
     pub score: u64,
-    //(1 + 6) * 7 = 49
+    //(1 + 9) * 7 = 70
     pub slots: [Option<CharacterInfo>; 7],
     //2
     pub last_character_id: u16,
 }
 
 #[derive(Default, AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq)]
-// size: 2 + 1 + 1 + 1 + 1= 6
+// size: 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 9
 pub struct CharacterInfo {
     pub id: u16,
     pub alignment: u8,
     pub character_type: u8,
     pub cooldown: u8,
     pub cooldown_timer: u8,
+    pub max_health: u8,
+    pub health: u8,
+    pub attack_damage: u8,
 }
 
 impl CharacterInfo {

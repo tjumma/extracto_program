@@ -46,7 +46,6 @@ pub mod extracto_program {
         run.authority = player.key();
         run.score = 0;
 
-        msg!("Player {} initialized", player_data.name);
         Ok(())
     }
 
@@ -108,6 +107,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[0],
             health: HEALTH_BY_TYPE[0],
             attack_damage: ATTACK_BY_TYPE[0],
+            state: 0
         });
         run.slots[1] = Some(CharacterInfo {
             id: 1,
@@ -118,6 +118,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[1],
             health: HEALTH_BY_TYPE[1],
             attack_damage: ATTACK_BY_TYPE[1],
+            state: 0
         });
         run.slots[2] = Some(CharacterInfo {
             id: 2,
@@ -128,6 +129,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[2],
             health: HEALTH_BY_TYPE[2],
             attack_damage: ATTACK_BY_TYPE[2],
+            state: 0
         });
         run.slots[3] = Some(CharacterInfo {
             id: 3,
@@ -138,6 +140,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[3],
             health: HEALTH_BY_TYPE[3],
             attack_damage: ATTACK_BY_TYPE[3],
+            state: 0
         });
         run.slots[4] = Some(CharacterInfo {
             id: 4,
@@ -148,6 +151,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[4],
             health: HEALTH_BY_TYPE[4],
             attack_damage: ATTACK_BY_TYPE[4],
+            state: 0
         });
         run.slots[5] = Some(CharacterInfo {
             id: 5,
@@ -158,6 +162,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[5],
             health: HEALTH_BY_TYPE[5],
             attack_damage: ATTACK_BY_TYPE[5],
+            state: 0
         });
         run.slots[6] = Some(CharacterInfo {
             id: 6,
@@ -168,6 +173,7 @@ pub mod extracto_program {
             max_health: HEALTH_BY_TYPE[6],
             health: HEALTH_BY_TYPE[6],
             attack_damage: ATTACK_BY_TYPE[6],
+            state: 0
         });
 
         run.last_character_id = 6;
@@ -187,7 +193,6 @@ pub mod extracto_program {
 
         run.last_card_id = 2;
 
-        msg!("Run started");
         Ok(())
     }
 
@@ -215,7 +220,6 @@ pub mod extracto_program {
 
         if run.score > player_data.best_score {
             player_data.best_score = run.score;
-            msg!("New best score: {}", player_data.best_score);
         }
 
         player_data.is_in_run = false;
@@ -224,7 +228,6 @@ pub mod extracto_program {
         run.last_character_id = 0;
         run.last_card_id = 0;
 
-        msg!("RunData finished");
         Ok(())
     }
 
@@ -346,9 +349,7 @@ pub mod extracto_program {
 
     pub fn increment_via_thread(ctx: Context<IncrementViaThread>) -> Result<()> {
         let run = &mut ctx.accounts.run;
-        msg!("Previous points: {}", run.score);
         run.score = run.score.checked_add(1).unwrap();
-        msg!("Run points incremented. Current points: {}", run.score);
 
         let mut slots_clone = run.slots.clone();
         let n = run.slots.len();
@@ -366,6 +367,9 @@ pub mod extracto_program {
                         new_cooldown_timer = character_info.cooldown;
                         perform_action = true;
                     }
+                    else{
+                        character_info.state = 0;
+                    }
                     character_info.cooldown_timer = new_cooldown_timer;
 
                     slots_clone[i] = Some(character_info);
@@ -377,6 +381,7 @@ pub mod extracto_program {
                                 if slots_clone[i - 1].is_none() {
                                     //move left
                                     slots_clone[i] = None;
+                                    character_info.state = 2;
                                     slots_clone[i - 1] = Some(character_info);
                                 }
                                 //if there is somebody to the left
@@ -385,6 +390,8 @@ pub mod extracto_program {
 
                                     //if it is a hero
                                     if attacked_character.alignment == 0 {
+                                        character_info.state = 1;
+                                        slots_clone[i] = Some(character_info);
                                         //attack the hero
                                         if character_info.attack_damage >= attacked_character.health
                                         {
@@ -412,6 +419,8 @@ pub mod extracto_program {
                                         //if it is a hero
                                         if attacked_character.alignment == 1 {
                                             //attack the hero
+                                            character_info.state = 1;
+                                            slots_clone[i] = Some(character_info);
                                             if character_info.attack_damage
                                                 >= attacked_character.health
                                             {
@@ -437,6 +446,8 @@ pub mod extracto_program {
                                             //if it is a hero
                                             if attacked_character.alignment == 1 {
                                                 //attack the hero
+                                                character_info.state = 1;
+                                                slots_clone[i] = Some(character_info);
                                                 if character_info.attack_damage
                                                     >= attacked_character.health
                                                 {
@@ -459,6 +470,9 @@ pub mod extracto_program {
                                         let mut attacked_character = slots_clone[6].unwrap();
 
                                         if attacked_character.alignment == 1 {
+                                            //attack
+                                            character_info.state = 1;
+                                            slots_clone[i] = Some(character_info);
                                             if character_info.attack_damage
                                                 >= attacked_character.health
                                             {
@@ -501,6 +515,7 @@ pub mod extracto_program {
                 max_health: HEALTH_BY_TYPE[random_enemy_type as usize],
                 health: HEALTH_BY_TYPE[random_enemy_type as usize],
                 attack_damage: ATTACK_BY_TYPE[random_enemy_type as usize],
+                state: 0
             };
 
             slots_clone[6] = Some(new_character_info);
@@ -517,9 +532,7 @@ pub mod extracto_program {
     )]
     pub fn increment(ctx: Context<Increment>) -> Result<()> {
         let run = &mut ctx.accounts.run;
-        msg!("Previous run points: {}", run.score);
         run.score = run.score.checked_add(1).unwrap();
-        msg!("Run points incremented. Current points: {}", run.score);
         Ok(())
     }
 
@@ -587,7 +600,6 @@ pub mod extracto_program {
     pub fn reset(ctx: Context<Reset>) -> Result<()> {
         let run = &mut ctx.accounts.run;
         run.score = 0;
-        msg!("Run points reset. Current points: {}", run.score);
         Ok(())
     }
 }
@@ -607,7 +619,7 @@ pub struct InitPlayer<'info> {
         payer = player,
         seeds = [RUN_SEED, player.key().as_ref()],
         bump,
-        space = 8 + 32 + 8 + 2 + 70 + 2 + 9 + 2)]
+        space = 8 + 32 + 8 + 2 + 77 + 2 + 9 + 2)]
     pub run: Account<'info, RunData>,
     #[account(mut)]
     pub player: Signer<'info>,
@@ -806,7 +818,7 @@ pub struct RunData {
     pub score: u64,
     //2
     pub experience: u16,
-    //(1 + 9) * 7 = 70
+    //(1 + 10) * 7 = 77
     pub slots: [Option<CharacterInfo>; 7],
     //2
     pub last_character_id: u16,
@@ -817,7 +829,7 @@ pub struct RunData {
 }
 
 #[derive(Default, AnchorSerialize, AnchorDeserialize, Copy, Clone, PartialEq, Eq)]
-// size: 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 9
+// size: 2 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 = 10
 pub struct CharacterInfo {
     pub id: u16,
     pub alignment: u8,
@@ -827,6 +839,7 @@ pub struct CharacterInfo {
     pub max_health: u8,
     pub health: u8,
     pub attack_damage: u8,
+    pub state: u8
 }
 
 impl CharacterInfo {

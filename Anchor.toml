@@ -12,7 +12,7 @@ extracto_program = "CHPyHid6CQzErEYrsuinBRsjPdsUZdUzgKMCc6VZ9Tjf"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/tjumma/.config/solana/id.json"
 
 [scripts]
